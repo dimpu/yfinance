@@ -12,15 +12,16 @@ const defaultQueryHost = "https://query2.finance.yahoo.com"
 const defaultConcurrency = 4
 
 type Client struct {
-	httpClient   *http.Client
-	queryHost    string
-	sem          *semaphore.Weighted
-	crumb        string
-	crumbMu      sync.Mutex
-	crumbValid   bool
-	logger       Logger
-	validation   ValidationOpts
-	fetchOptions *FetchOptions
+	httpClient             *http.Client
+	queryHost              string
+	sem                    *semaphore.Weighted
+	crumb                  string
+	crumbMu                sync.Mutex
+	crumbValid             bool
+	logger                 Logger
+	validation             ValidationOpts
+	fetchOptions           *FetchOptions
+	fundamentalsQueryHost  string // for testing; empty means use default query1.finance.yahoo.com
 }
 
 type Config struct {
