@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-const defaultQueryHost = "query2.finance.yahoo.com"
+const defaultQueryHost = "https://query2.finance.yahoo.com"
 const defaultConcurrency = 4
 
 type Client struct {
