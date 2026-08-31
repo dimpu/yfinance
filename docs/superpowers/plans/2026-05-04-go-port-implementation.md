@@ -4,7 +4,7 @@
 
 **Goal:** Port yahoo-finance2 TypeScript library to Go with typed API client, cookie/crumb auth, response coercion, and concurrency control.
 
-**Architecture:** Flat Go package `github.com/dimpu/yahoo-finance` with all modules in one package. Semaphore-based concurrency, custom UnmarshalJSON for Yahoo response coercion, struct-tag validation for inputs.
+**Architecture:** Flat Go package `github.com/dimpu/yfinance` with all modules in one package. Semaphore-based concurrency, custom UnmarshalJSON for Yahoo response coercion, struct-tag validation for inputs.
 
 **Tech Stack:** Go 1.22+, `golang.org/x/sync/semaphore`, `github.com/go-playground/validator/v10`, stdlib `net/http`, `encoding/json`, `context`
 
@@ -24,7 +24,7 @@
 
 ```bash
 cd /Users/bytedance/CODEBASE/demo/yahoo-finance
-go mod init github.com/dimpu/yahoo-finance
+go mod init github.com/dimpu/yfinance
 go get golang.org/x/sync/semaphore
 go get github.com/go-playground/validator/v10
 ```

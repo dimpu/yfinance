@@ -1,11 +1,17 @@
 # yahoo-finance
 
-Go client for Yahoo Finance API. Port of [yahoo-finance2](https://github.com/gadicc/yahoo-finance2).
+[![Go Reference](https://pkg.go.dev/badge/github.com/dimpu/yfinance.svg)](https://pkg.go.dev/github.com/dimpu/yfinance)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dimpu/yfinance)](https://goreportcard.com/report/github.com/dimpu/yfinance)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Go client for the Yahoo Finance API. Port of [yahoo-finance2](https://github.com/gadicc/yahoo-finance2).
+
+**Requires Go 1.25+**
 
 ## Install
 
 ```bash
-go get github.com/dimpu/yahoo-finance
+go get github.com/dimpu/yfinance
 ```
 
 ## Quick Start
@@ -19,22 +25,48 @@ import (
     "log"
     "time"
 
-    yf "github.com/dimpu/yahoo-finance"
+    yf "github.com/dimpu/yfinance"
+    "github.com/dimpu/yfinance/chart"
 )
 
 func main() {
     client := yf.NewClient(nil)
     ctx := context.Background()
 
-    // Get real-time quotes
-    quotes, err := client.Quote(ctx, []string{"AAPL", "GOOGL"}, nil)
+    // Get chart data
+    result, err := client.Chart.Get(ctx, "AAPL", &chart.Options{
+        Period1:  time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+        Interval: "1d",
+    })
     if err != nil {
         log.Fatal(err)
     }
-    for _, q := range quotes {
-        fmt.Printf("%s: $%.2f (%s)\n", q.Symbol, *q.RegularMarketPrice, q.MarketState)
-    }
+    fmt.Printf("Symbol: %s, Quotes: %d\n", result.Meta.Symbol, len(result.Quotes))
 }
+```
+
+## Architecture
+
+Each API module is a separate sub-package with its own `Service` type:
+
+```
+github.com/dimpu/yfinance/          # Client + Config + re-exported types
+├── chart/                                # Chart service (OHLCV data)
+├── quote/                                # Quote service (real-time prices)
+├── historical/                           # Historical service (delegates to chart)
+├── options/                              # Options chain service
+├── fundamentals/                         # Fundamentals time series service
+├── insights/                             # Analyst insights service
+├── screener/                             # Predefined screener service
+├── search/                               # Symbol search service
+├── trending/                             # Trending symbols service
+├── recommendations/                      # Related stock recommendations
+├── quotesummary/                         # Comprehensive financial data
+└── internal/                             # Shared infrastructure (not importable)
+    ├── types/                            # YahooDate, TwoNumberRange, Logger, etc.
+    ├── errors/                           # BadRequestError, HTTPError, etc.
+    ├── fetch/                            # HTTP client, crumb auth, semaphore
+    └── validate/                         # Struct validation
 ```
 
 ## Configuration
@@ -58,25 +90,26 @@ client := yf.NewClient(&yf.Config{
 ### Quote — Real-time price data
 
 ```go
-quotes, err := client.Quote(ctx, []string{"AAPL", "MSFT"}, &yf.QuoteOptions{
+import "github.com/dimpu/yfinance/quote"
+
+quotes, err := client.Quote.Get(ctx, []string{"AAPL", "MSFT"}, &quote.Options{
     Fields: []string{"regularMarketPrice", "fiftyTwoWeekHigh"},
 })
 ```
 
-Needs crumb auth. Returns `[]yf.Quote` with 80+ fields including price, volume, market cap, 52-week range, EPS, P/E ratios, dividends, and more.
+Needs crumb auth. Returns `[]quote.Quote` with 80+ fields.
 
 ### Chart — Historical OHLCV data
 
 ```go
-result, err := client.Chart(ctx, "AAPL", &yf.ChartOptions{
+import "github.com/dimpu/yfinance/chart"
+
+result, err := client.Chart.Get(ctx, "AAPL", &chart.Options{
     Period1:        time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
     Period2:        time.Now(),
     Interval:       "1d",
     IncludePrePost: true,
 })
-// result.Meta     — currency, exchange, valid ranges
-// result.Quotes   — []ChartQuote with date, open, high, low, close, volume, adjclose
-// result.Events   — dividends and splits
 ```
 
 Valid intervals: `1m`, `2m`, `5m`, `15m`, `30m`, `60m`, `90m`, `1h`, `1d`, `5d`, `1wk`, `1mo`, `3mo`
@@ -84,17 +117,19 @@ Valid intervals: `1m`, `2m`, `5m`, `15m`, `30m`, `60m`, `90m`, `1h`, `1d`, `5d`,
 ### Historical — Price/dividend/split history
 
 ```go
-rows, err := client.Historical(ctx, "AAPL", &yf.HistoricalOptions{
+import "github.com/dimpu/yfinance/historical"
+
+rows, err := client.Historical.Get(ctx, "AAPL", &historical.Options{
     Period1:              time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
     Interval:             "1d",
     IncludeAdjustedClose: true,
 })
 
-dividends, err := client.HistoricalDividends(ctx, "AAPL", &yf.HistoricalOptions{
+dividends, err := client.Historical.Dividends(ctx, "AAPL", &historical.Options{
     Period1: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 })
 
-splits, err := client.HistoricalSplits(ctx, "AAPL", &yf.HistoricalOptions{
+splits, err := client.Historical.Splits(ctx, "AAPL", &historical.Options{
     Period1: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 })
 ```
@@ -104,39 +139,39 @@ Wraps Chart internally. Valid intervals: `1d`, `1wk`, `1mo`
 ### Search — Find symbols and news
 
 ```go
-result, err := client.Search(ctx, "apple", &yf.SearchOptions{
+import "github.com/dimpu/yfinance/search"
+
+result, err := client.Search.Get(ctx, "apple", &search.Options{
     QuotesCount: 5,
     NewsCount:   3,
 })
-// result.Quotes — matching symbols with exchange, type, score
-// result.News   — related news articles
 ```
 
 ### QuoteSummary — Comprehensive financial data
 
 ```go
-result, err := client.QuoteSummary(ctx, "AAPL", &yf.QuoteSummaryOptions{
-    Modules: []string{"price", "summaryDetail", "financialData", "defaultKeyStatistics"},
+import "github.com/dimpu/yfinance/quotesummary"
+
+result, err := client.QuoteSummary.Get(ctx, "AAPL", &quotesummary.Options{
+    Modules: []string{"price", "summaryDetail", "financialData"},
 })
 
-// Or request all 33 modules:
-result, err := client.QuoteSummary(ctx, "AAPL", &yf.QuoteSummaryOptions{
+// All 33 modules:
+result, err := client.QuoteSummary.Get(ctx, "AAPL", &quotesummary.Options{
     Modules: []string{"all"},
 })
 ```
 
-Needs crumb auth. Available modules: `assetProfile`, `balanceSheetHistory`, `balanceSheetHistoryQuarterly`, `calendarEvents`, `cashflowStatementHistory`, `cashflowStatementHistoryQuarterly`, `defaultKeyStatistics`, `earnings`, `earningsHistory`, `earningsTrend`, `financialData`, `fundOwnership`, `fundPerformance`, `fundProfile`, `incomeStatementHistory`, `incomeStatementHistoryQuarterly`, `indexTrend`, `industryTrend`, `insiderHolders`, `insiderTransactions`, `institutionOwnership`, `majorDirectHolders`, `majorHoldersBreakdown`, `netSharePurchaseActivity`, `price`, `quoteType`, `recommendationTrend`, `secFilings`, `sectorTrend`, `summaryDetail`, `summaryProfile`, `topHoldings`, `upgradeDowngradeHistory`
+Needs crumb auth.
 
 ### Options — Options chain data
 
 ```go
-result, err := client.Options(ctx, "AAPL", &yf.OptionsOptions{
+import "github.com/dimpu/yfinance/options"
+
+result, err := client.Options.Get(ctx, "AAPL", &options.Options{
     Date: &expirationDate,
 })
-// result.Strikes          — available strike prices
-// result.ExpirationDates  — available expiration dates
-// result.Options[0].Calls — call options
-// result.Options[0].Puts  — put options
 ```
 
 Needs crumb auth.
@@ -144,78 +179,64 @@ Needs crumb auth.
 ### Screener — Predefined stock screeners
 
 ```go
-result, err := client.Screener(ctx, yf.ScreenerDayGainers, &yf.ScreenerOptions{
+import "github.com/dimpu/yfinance/screener"
+
+result, err := client.Screener.Get(ctx, screener.ScreenerDayGainers, &screener.Options{
     Count: 10,
 })
 ```
 
-Needs crumb auth. 15 predefined screeners:
+Needs crumb auth. 15 predefined screeners available as constants in the `screener` package.
 
-| Constant | ID |
-|----------|-----|
-| `ScreenerAggressiveSmallCaps` | aggressive_small_caps |
-| `ScreenerConservativeForeignFunds` | conservative_foreign_funds |
-| `ScreenerDayGainers` | day_gainers |
-| `ScreenerDayLosers` | day_losers |
-| `ScreenerGrowthTechStocks` | growth_technology_stocks |
-| `ScreenerHighYieldBond` | high_yield_bond |
-| `ScreenerMostActives` | most_actives |
-| `ScreenerMostShorted` | most_shorted_stocks |
-| `ScreenerPortfolioAnchors` | portfolio_anchors |
-| `ScreenerSmallCapGainers` | small_cap_gainers |
-| `ScreenerSolidLargeGrowthFunds` | solid_large_growth_funds |
-| `ScreenerSolidMidcapGrowthFunds` | solid_midcap_growth_funds |
-| `ScreenerTopMutualFunds` | top_mutual_funds |
-| `ScreenerUndervaluedGrowth` | undervalued_growth_stocks |
-| `ScreenerUndervaluedLargeCaps` | undervalued_large_caps |
-
-### RecommendationsBySymbol — Related stock recommendations
+### Recommendations — Related stock recommendations
 
 ```go
-results, err := client.RecommendationsBySymbol(ctx, []string{"AAPL"}, nil)
-// results[0].RecommendedSymbols — related symbols with scores
+import "github.com/dimpu/yfinance/recommendations"
+
+results, err := client.Recommendations.Get(ctx, []string{"AAPL"}, nil)
 ```
 
 ### Insights — Analyst insights and research
 
 ```go
-result, err := client.Insights(ctx, "AAPL", &yf.InsightsOptions{
+import "github.com/dimpu/yfinance/insights"
+
+result, err := client.Insights.Get(ctx, "AAPL", &insights.Options{
     ReportsCount: 5,
 })
-// result.Recommendation   — analyst rating (BUY/SELL/HOLD)
-// result.CompanySnapshot  — sector comparison
-// result.InstrumentInfo   — technicals and valuation
-// result.SigDevs          — significant developments
 ```
 
-### FundamentalsTimeSeries — Financial statements over time
+### Fundamentals — Financial statements over time
 
 ```go
-results, err := client.FundamentalsTimeSeries(ctx, "AAPL", &yf.FundamentalsTimeSeriesOptions{
+import "github.com/dimpu/yfinance/fundamentals"
+
+results, err := client.Fundamentals.Get(ctx, "AAPL", &fundamentals.Options{
     Period1: time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
     Module:  "financials",
     Type:    "quarterly",
 })
-// Each result has Date, Type, PeriodType, and Fields map[string]*float64
-// with keys like TotalRevenue, NetIncome, EBITDA, etc.
 ```
 
 Modules: `financials`, `balance-sheet`, `cash-flow`, `all`
 Types: `quarterly`, `annual`, `trailing`
 
-### TrendingSymbols — Trending tickers by region
+### Trending — Trending tickers by region
 
 ```go
-result, err := client.TrendingSymbols(ctx, "US", &yf.TrendingOptions{
+import "github.com/dimpu/yfinance/trending"
+
+result, err := client.Trending.Get(ctx, "US", &trending.Options{
     Count: 10,
 })
-// result.Quotes — trending symbols
 ```
 
 ## Error Handling
 
+Error types are re-exported from the root package for convenience:
+
 ```go
-quotes, err := client.Quote(ctx, []string{"AAPL"}, nil)
+quotes, err := client.Quote.Get(ctx, []string{"AAPL"}, nil)
 if err != nil {
     switch e := err.(type) {
     case *yf.BadRequestError:
@@ -227,14 +248,14 @@ if err != nil {
     case *yf.FailedValidationError:
         // Response validation failed, e.Errors has details
     default:
-        // Other errors (network, context cancellation, etc.)
+        // Other errors
     }
 }
 ```
 
 ## Authentication
 
-The client automatically handles Yahoo Finance's cookie/crumb authentication for endpoints that require it (Quote, Options, QuoteSummary, Screener). On first request to a protected endpoint, the client:
+The client automatically handles Yahoo Finance's cookie/crumb authentication for endpoints that require it. On first request to a protected endpoint, the client:
 
 1. Visits `finance.yahoo.com` to collect cookies
 2. Handles GDPR consent redirects if needed
@@ -244,12 +265,22 @@ The client automatically handles Yahoo Finance's cookie/crumb authentication for
 
 ## Concurrency
 
-Requests are rate-limited via a semaphore (default: 4 concurrent). Configure via `Config.Concurrency`. Context cancellation is respected — pass a context with timeout for deadlines:
+Requests are rate-limited via a semaphore (default: 4 concurrent). Configure via `Config.Concurrency`.
 
-```go
-ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-defer cancel()
-quotes, err := client.Quote(ctx, []string{"AAPL"}, nil)
+## CLI
+
+An optional CLI tool is included for quick lookups from the terminal:
+
+```bash
+# Build and install
+go install github.com/dimpu/yfinance/cmd/yf@latest
+
+# Usage
+yf quote AAPL MSFT
+yf chart AAPL --interval 1d --period 1mo
+yf options AAPL
+yf trending --region US
+yf search apple
 ```
 
 ## Running Tests
@@ -258,6 +289,22 @@ quotes, err := client.Quote(ctx, []string{"AAPL"}, nil)
 go test -v -race ./...
 ```
 
+## Documentation
+
+Full API documentation is available at [pkg.go.dev](https://pkg.go.dev/github.com/dimpu/yfinance).
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feat/my-feature`)
+3. Commit your changes (`git commit -m 'feat: add my feature'`)
+4. Push to the branch (`git push origin feat/my-feature`)
+5. Open a Pull Request
+
+Please ensure tests pass (`go test -v -race ./...`) before submitting.
+
 ## License
 
-MIT
+[MIT](LICENSE)
