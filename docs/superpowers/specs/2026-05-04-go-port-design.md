@@ -1,7 +1,7 @@
 # Go Port of yahoo-finance2 — Design Spec
 
 **Date:** 2026-05-04
-**Module path:** `github.com/dimpu/yahoo-finance`
+**Module path:** `github.com/dimpu/yfinance`
 **Source:** https://github.com/gadicc/yahoo-finance2 (TypeScript/Deno)
 
 ## Overview
